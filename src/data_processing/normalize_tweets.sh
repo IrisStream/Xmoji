@@ -27,5 +27,5 @@ for file_path in "$input_dir"/*; do
 		gsub(/@[a-zA-Z0-9_]+/, "@USER", line); # Replace user tags starting with '@'
 		gsub(/(http[^[:space:]]+|www[^\s]+)/, "HTTPURL", line); # Adjusted URL pattern
 		print line;
-	}' $file_path > $output_dir/$file_name.txt
+	}' $file_path > $output_dir/$file_name
 done
