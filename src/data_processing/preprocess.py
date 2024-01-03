@@ -52,4 +52,20 @@ async def main():
         await asyncio.gather(*[process_file(file) for file in files])
 
 if __name__ == "__main__":
+    with open('../../data/input.jsonl', 'r') as input_file:
+        for i, line in enumerate(input_file):
+            # Load the JSON object from the line
+            json_object = json.loads(line)
+
+            # Extract the "text" property from the JSON object
+            tweets = json_object.get('text', [])
+            
+            with open(f'../../data/raw_input/{i}.txt', 'w') as output_file:
+                output_file.write('\n'.join(tweets))
+
+    try:
+        subprocess.run(['bash', 'normalize_tweets.sh', '../../data/raw_input', '../../data/normalized_input'], check=True)
+    except subprocess.CalledProcessError as e:
+        print(f"Error: {e}")
+
     asyncio.run(main())
