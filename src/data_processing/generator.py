@@ -7,6 +7,7 @@ import pandas as pd
 import json
 import shutil
 
+# ok
 def get_X_y(file_path:str='../../data/data.csv'):
     df = pd.read_csv(file_path, sep='\t', names=["TEXT", "LABEL"])
 
@@ -24,7 +25,8 @@ def get_X_y(file_path:str='../../data/data.csv'):
 
     return X, y
 
-def get_data_by_label(X: pd.Series, y: np.Series, num_label=10) -> list[np.ndarray]:
+
+def get_data_by_label(X: pd.Series, y: pd.Series, num_label=10) -> list[np.ndarray]:
     data_by_label = []
     for label in range(num_label):
         data_by_label.append(X[y == label])
