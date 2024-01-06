@@ -7,7 +7,12 @@ import pandas as pd
 import json
 import shutil
 
-def get_X_y(file_path:str='../../data/data.csv'):
+NUMBER_OF_LABEL = 1573
+
+# ok
+def get_X_y(data_path:str='../../data'):
+    file_path = os.path.join(data_path, 'data.csv')
+
     df = pd.read_csv(file_path, sep='\t', names=["TEXT", "LABEL"])
 
     encode_dict = {}
@@ -15,16 +20,17 @@ def get_X_y(file_path:str='../../data/data.csv'):
     def encode_emoji(x):
         if x not in encode_dict.keys():
             encode_dict[x]=len(encode_dict)
-        return encode_dict[x]
+        return encode_dict[x] - 1
 
     df['ENCODE_LABEL'] = df['LABEL'].apply(lambda x: encode_emoji(x))
 
-    X = df["TEXT"]
-    y = df['ENCODE_LABEL']
+    X = df["TEXT"].to_numpy()
+    y = df['ENCODE_LABEL'].to_numpy()
 
     return X, y
 
-def get_data_by_label(X: pd.Series, y: np.Series, num_label=10) -> list[np.ndarray]:
+
+def get_data_by_label(X, y, num_label=10) -> list[np.ndarray]:
     data_by_label = []
     for label in range(num_label):
         data_by_label.append(X[y == label])
@@ -33,20 +39,12 @@ def get_data_by_label(X: pd.Series, y: np.Series, num_label=10) -> list[np.ndarr
     return data_by_label
 
 def draw_dis(axis, client:dict[int, list], title:str=None, num_labels:int=10):
-    if num_labels > 10:
-        x = [str(key) for key in client.keys()]
-        y = [len(client[key]) for key in client.keys()]
-        axis.bar(x, y)
-        if title:
-            axis.set_title(title)
-    else:
-        profile = np.zeros((num_labels,2))
-        profile[:,0] = range(num_labels)
-        for key in client.keys():
-            profile[int(key),1] = len(client[key])
-        axis.bar(x=profile[:,0], height=profile[:,1])
-        if title:
-            axis.set_title(title)
+    agg_data = client.groupby('LABEL')['TEXT'].count().reset_index()
+    x = agg_data.LABEL.to_numpy()
+    y = agg_data.TEXT.to_numpy()
+    axis.bar(x, y)
+    if title:
+        axis.set_title(title)
 
 def vis_dis_client(dir:str, dataset:str, k:int, num_labels:int):
     train_dir = os.path.join(dir, dataset, f'client_train_{k}')
@@ -58,7 +56,7 @@ def vis_dis_client(dir:str, dataset:str, k:int, num_labels:int):
     list_file.sort()
     for idx, file_ in enumerate(list_file):
         fi = open(os.path.join(train_dir, file_), 'r')
-        data = json.load(fi)
+        data = pd.read_csv(fi, sep='\t', names=["TEXT", "LABEL"])
         draw_dis(ax.flat[idx], data, file_, num_labels)
     fig.suptitle(f'train {dataset}: k={k}')
     fig.show()
@@ -69,7 +67,7 @@ def vis_dis_client(dir:str, dataset:str, k:int, num_labels:int):
     list_file.sort()
     for idx, file_ in enumerate(list_file):
         fi = open(os.path.join(test_dir, file_), 'r')
-        data = json.load(fi)
+        data = pd.read_csv(fi, sep='\t', names=["TEXT", "LABEL"])
         draw_dis(ax.flat[idx], data, file_, num_labels)
     fig.suptitle(f'test {dataset}: k={k}')
     fig.show()
@@ -78,7 +76,7 @@ def write_data(file_path:str, client:dict[int, list]):
     df = pd.DataFrame([(text, label) for label, text_list in client.items() for text in text_list], columns=['TEXT', 'LABEL'])
 
     # Write the DataFrame to a CSV file
-    df.to_csv(file_path, index=False)
+    df.to_csv(file_path, index=False, sep='\t')
 
 def write_client(dir:str, id:int, client:dict[int, list], split_supp_qry:bool=False):
     if split_supp_qry:
@@ -151,29 +149,39 @@ def distribution_based_split_client(data_by_label:list[np.array], num_clients:in
     return all_clients
 
 # Distribution-based label imbalance: each party is allocated a proportion of the samples of each label according to Dirichlet distribution.
-def dirichlet_based_gen(data_path:str='../../data/data.csv'):
+def dirichlet_based_gen(data_path:str='../../data'):
     num_clients = 100
-    num_labels = NUMBER_OF_LABEL
+    num_labels = 1573
     k=4 # 4 for dirichlet based imbalance (alpha = 0.5)
+
+    distribution_data_path=os.path.join(data_path, 'distribution')
+    if os.path.isdir(distribution_data_path):
+        shutil.rmtree(distribution_data_path)
+    os.mkdir(distribution_data_path)
 
     X, y = get_X_y(data_path)
     data_by_label = get_data_by_label(X, y, num_labels)
 
     print(f'Generate data: Dirichlet distribution, num_clients={num_clients}, num_labels={num_labels}')
     all_clients = distribution_based_split_client(data_by_label, num_clients, num_labels)
-    write_all_clients(all_clients, data_path, k)
+    write_all_clients(all_clients, distribution_data_path, k)
 
-def iid_gen(data_path='../../data/data.csv'):
+def iid_gen(data_path='../../data'):
     num_clients = 100
-    num_labels = NUMBER_OF_LABEL
+    num_labels = 1573
     k=5 # 5 for iid
 
+    iid_data_path=os.path.join(data_path, 'iid')
+    if os.path.isdir(iid_data_path):
+        shutil.rmtree(iid_data_path)
+    os.mkdir(iid_data_path)
+
     X, y = get_X_y(data_path)
-    data_by_label = get_data_by_label(X, y, num_labels[idx])
+    data_by_label = get_data_by_label(X, y, num_labels)
 
     print(f'Generate data: IID, num_clients={num_clients}, num_labels={num_labels}')
     all_clients = distribution_based_split_client(data_by_label, num_clients, num_labels, 'uniform')
-    write_all_clients(all_clients, data_path, k)
+    write_all_clients(all_clients, iid_data_path, k)
 
 # split using Quantity-based label imbalance mode
 def quantity_based_split_client(data_by_label:list[np.array], k:int, num_clients:int=100, num_labels:int=10):
@@ -204,10 +212,15 @@ def quantity_based_split_client(data_by_label:list[np.array], k:int, num_clients
     return all_clients
 
 # Quantity-based label imbalance: each party owns data samples of a fixed number of labels.
-def quantity_base_gen(data_path='../../data/data.csv'):
+def quantity_base_gen(data_path='../../data'):
     ks = [1,2,3] # 1,2,3 for quantity-based imbalance
     num_clients = 100
-    num_labels = NUMBER_OF_LABEL
+    num_labels = 1573
+
+    quantity_data_path=os.path.join(data_path, 'quantity')
+    if os.path.isdir(quantity_data_path):
+        shutil.rmtree(quantity_data_path)
+    os.mkdir(quantity_data_path)
 
     X, y = get_X_y(data_path)
     data_by_label = get_data_by_label(X, y, num_labels)
@@ -216,10 +229,5 @@ def quantity_base_gen(data_path='../../data/data.csv'):
         print(f'Generate data: k={k}, num_clients={num_clients}, num_labels={num_labels}')
         all_clients = quantity_based_split_client(data_by_label, k, num_clients, num_labels)
 
-        # fig, ax = plt.subplots(nrows=10, ncols=10, figsize=(15, 15), sharey=True)
-        # fig.subplots_adjust(hspace=0.3)
-        # for client in all_clients.keys():
-        #     draw_dis(ax.flat[client], all_clients[client], num_labels)
-        # fig.suptitle(f'Data {dataset}: k={k}, num_clients={num_clients}, num_labels={num_labels}')
-
-        write_all_clients(all_clients, data_path, k)
+        # Write data to quantity directory
+        write_all_clients(all_clients, quantity_data_path, k)
