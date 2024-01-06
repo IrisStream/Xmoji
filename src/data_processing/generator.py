@@ -30,7 +30,7 @@ from settings import strategies, FL_config, data_info
 #    return X, y
 
 
-def get_data_by_label(data:pd.DataFrame, num_labels:int) -> list[np.ndarray]:
+def get_data_by_label(data:pd.DataFrame, num_labels:int) -> list[pd.DataFrame]:
     data_by_label = []
     for label in range(num_labels):
         data_by_label.append(data[data.LABEL == label])
@@ -92,7 +92,7 @@ def write_client(dir:str, id:int, client:dict[int, pd.DataFrame], split_supp_qry
         train_file = os.path.join(dir, f'{id}.csv')
         write_data(train_file, client)
 
-def write_all_clients(clients:dict[int, dict], data_path:str, strategy:str, num_clients:int=100):
+def write_all_clients(clients:dict[int, dict], data_path:str, strategy:str):
     train_data_path = os.path.join(data_path, f'client_train_{strategy}')
     test_data_path = os.path.join(data_path, f'client_test_{strategy}')
     if os.path.isdir(train_data_path):
@@ -112,7 +112,7 @@ def write_all_clients(clients:dict[int, dict], data_path:str, strategy:str, num_
             write_client(dir=test_data_path, id=client, client=clients[client], split_supp_qry=True)
 
 # type = {'uniform', 'dirichlet'}
-def distribution_based_split_client(data_by_label:list[np.array], num_clients:int=100, num_labels:int=10, type:str='dirichlet'):
+def distribution_based_split_client(data_by_label:list[pd.DataFrame], num_clients:int, num_labels:int, type:str, alpha:float):
     # compute number of samples for each label
     num_samples_per_label = []
     for data in data_by_label:
@@ -120,16 +120,15 @@ def distribution_based_split_client(data_by_label:list[np.array], num_clients:in
 
     num_samples_in_client = []
     # compute the percentages data of each label in each client
+    alphas = np.full(num_clients, alpha)
     if type=='uniform':
         # split using Uniform distribution
-        alpha = np.full(num_clients, 1/num_clients)
         for label in range(num_labels):
-            num_samples_in_client.append((np.round(alpha * num_samples_per_label[label]).astype(int)).tolist())
+            num_samples_in_client.append((np.round(alphas * num_samples_per_label[label]).astype(int)).tolist())
     elif type=='dirichlet':
         # split using Distribution-based label imbalance mode
-        alpha = np.full(num_clients, 0.5) # 0.5 from an A* paper
         for label in range(num_labels):
-            p = np.random.dirichlet(alpha)
+            p = np.random.dirichlet(alphas)
             num_samples_in_client.append((np.round(p * num_samples_per_label[label]).astype(int)).tolist())
 
     # split data to client
@@ -148,18 +147,20 @@ def distribution_based_split_client(data_by_label:list[np.array], num_clients:in
     return clients
 
 # Distribution-based label imbalance: each party is allocated a proportion of the samples of each label according to Dirichlet distribution.
-def dirichlet_based_gen(data:pd.DataFrame, num_clients:int=100, num_labels:int=10):
+def dirichlet_based_gen(data_path:str, num_clients:int=100, num_labels:int=10, alpha:float=0.5):
     # distribution_data_path=os.path.join(data_path, strategies.DISTRIBUTION_BASED_SKEW)
     # if os.path.isdir(distribution_data_path):
     #     shutil.rmtree(distribution_data_path)
     # os.mkdir(distribution_data_path)
+    data = data_info.get_table()
 
     data_by_label = get_data_by_label(data, num_labels)
 
     print(f'Generate data: Dirichlet distribution, num_clients={num_clients}, num_labels={num_labels}')
-    return distribution_based_split_client(data_by_label, num_clients, num_labels)
+    clients = distribution_based_split_client(data_by_label, num_clients, num_labels, alpha)
+    write_all_clients(clients, data_path, strategies.DISTRIBUTION_BASED_SKEW)
 
-def iid_gen(data_path='../../data'):
+def iid_gen(data_path:str, num_clients:int, num_labels:int):
     num_clients = 100
     num_labels = 1573
     k=5 # 5 for iid
@@ -173,8 +174,8 @@ def iid_gen(data_path='../../data'):
     data_by_label = get_data_by_label(X, y, num_labels)
 
     print(f'Generate data: IID, num_clients={num_clients}, num_labels={num_labels}')
-    all_clients = distribution_based_split_client(data_by_label, num_clients, num_labels, 'uniform')
-    write_all_clients(all_clients, iid_data_path, k)
+    clients = distribution_based_split_client(data_by_label, num_clients, num_labels, 'uniform')
+    write_all_clients(clients, data_path, strategies.IID)
 
 # split using Quantity-based label imbalance mode
 def quantity_based_split_client(data_by_label:list[np.array], k:int, num_clients:int=100, num_labels:int=10):
@@ -205,7 +206,7 @@ def quantity_based_split_client(data_by_label:list[np.array], k:int, num_clients
     return all_clients
 
 # Quantity-based label imbalance: each party owns data samples of a fixed number of labels.
-def quantity_base_gen(data_path='../../data'):
+def quantity_based_gen(data_path:str, num_clients:int, num_labels:int, labels_per_client:int):
     ks = [15,30,45] # 1,2,3 for quantity-based imbalance
     num_clients = 100
     num_labels = 1573
@@ -229,3 +230,15 @@ def quantity_base_gen(data_path='../../data'):
             strategy=f'quantity',
             num_clients=num_clients
         )
+
+def data_generator(data_path:str, strategy:str, *arg):
+    (num_clients, num_labels) = (arg[0], arg[1])
+
+    if strategy == strategies.DISTRIBUTION_BASED_SKEW:
+        alpha = arg[2]
+        dirichlet_based_gen(data_path, num_clients, num_labels, alpha)
+    elif strategy == strategies.IID:
+        iid_gen(data_path, num_clients, num_labels)
+    elif strategy == strategies.QUANTITY_BASED_SKEW:
+        labels_per_client = arg[2]
+        quantity_based_gen(data_path, num_clients, num_labels, labels_per_client)
