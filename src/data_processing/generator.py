@@ -213,7 +213,7 @@ def quantity_based_split_client(data_by_label:list[np.array], k:int, num_clients
 
 # Quantity-based label imbalance: each party owns data samples of a fixed number of labels.
 def quantity_base_gen(data_path='../../data'):
-    ks = [1,2,3] # 1,2,3 for quantity-based imbalance
+    ks = [15,30,45] # 1,2,3 for quantity-based imbalance
     num_clients = 100
     num_labels = 1573
 
