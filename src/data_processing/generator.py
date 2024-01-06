@@ -13,7 +13,7 @@ NUMBER_OF_LABEL = 1573
 def get_X_y(data_path:str='../../data'):
     file_path = os.path.join(data_path, 'data.csv')
 
-    df = pd.read_csv(file_path, sep='\t', names=["TEXT", "LABEL"])
+    df = pd.read_csv(file_path, sep='\t',  encoding="utf-8", names=["TEXT", "LABEL"])
 
     encode_dict = {}
 
@@ -26,6 +26,8 @@ def get_X_y(data_path:str='../../data'):
 
     X = df["TEXT"].to_numpy()
     y = df['ENCODE_LABEL'].to_numpy()
+    
+    pd.DataFrame(df[["LABEL", "ENCODE_LABEL"]]).to_json(os.path.join(data_path,"labels.json"), orient='records', lines=True)
 
     return X, y
 
