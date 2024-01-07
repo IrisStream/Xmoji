@@ -6,71 +6,44 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import json
 import shutil
-from settings import strategies, FL_config, data_info
+import csv
+from settings import strategies, FL_config, Data
 
-# ok
-# def get_X_y():
-#     df = data_info.get_table()
+def draw_dis(axis, file_path:str, title:str=None):
+    data = pd.read_csv(file_path, sep='\t',quoting=csv.QUOTE_NONE, names=Data.get_columns(), header=0)
+    dis = data.LABEL.value_counts().sort_index()
+    x = dis.index
+    y = dis.values
+    axis.bar(x, y, width=2)
+    # axis.get_xaxis().set_visible(False)
+    axis.set_title(title)
+    return dis.max()
 
-#    df = pd.read_csv(file_path, sep='\t',  encoding="utf-8", names=["TEXT", "LABEL"])
-#     encode_dict = {}
+def draw_all_dis(data_path:str, fig_size, title:str):
+    list_file = os.listdir(data_path)
+    list_file.sort()
 
-#     def encode_emoji(x):
-#         if x not in encode_dict.keys():
-#             encode_dict[x]=len(encode_dict)
-#         return encode_dict[x] - 1
+    fig, ax = plt.subplots(nrows=len(list_file)//10, ncols=10, figsize=fig_size, sharey=True)
+    fig.subplots_adjust(hspace=0.5)
 
-#     df['ENCODE_LABEL'] = df['LABEL'].apply(lambda x: encode_emoji(x))
+    ylimit = np.zeros(len(list_file))
+    for idx, file_ in enumerate(list_file):
+        file_path = os.path.join(data_path, file_)
+        ylimit[idx] = draw_dis(ax.flat[idx], file_path, file_)
+        # print(f'{file_path} - {ylimit[idx]}')
 
-#     X = df["TEXT"].to_numpy()
-#     y = df['ENCODE_LABEL'].to_numpy()
-
-#    pd.DataFrame(df[["LABEL", "ENCODE_LABEL"]]).to_json(os.path.join(data_path,"labels.json"), orient='records', lines=True)
-
-#    return X, y
-
-
-def get_data_by_label(data:pd.DataFrame, num_labels:int) -> list[pd.DataFrame]:
-    data_by_label = []
-    for label in range(num_labels):
-        data_by_label.append(data[data.LABEL == label])
-        # shuffle to have client with different data after generating
-        data_by_label[label](frac=1).reset_index(drop=True)
-    return data_by_label
-
-# def draw_dis(axis, client:dict[int, list], title:str=None):
-#     agg_data = client.groupby('LABEL')['TEXT'].count().reset_index()
-#     x = agg_data.LABEL.to_numpy()
-#     y = agg_data.TEXT.to_numpy()
-#     axis.bar(x, y)
-#     if title:
-#         axis.set_title(title)
+    fig.suptitle(title)
+    plt.setp(ax, xlim=(-4, Data.get_num_labels() + 4), ylim=(0, ylimit.mean()))
+    fig.tight_layout() 
+    fig.show()
 
 # def vis_dis_client(dir:str, dataset:str, k:int):
-#     train_dir = os.path.join(dir, dataset, f'client_train_{k}')
-#     test_dir  = os.path.join(dir, dataset, f'client_test_{k}')
+def vis_dis_client(data_path:str, strategy:str):
+    train_data_path, test_data_paths = get_output_data_path(data_path, strategy)
 
-#     fig, ax = plt.subplots(nrows=8, ncols=10, figsize=(15, 15), sharey=True)
-#     fig.subplots_adjust(hspace=0.5)
-#     list_file = os.listdir(train_dir)
-#     list_file.sort()
-#     for idx, file_ in enumerate(list_file):
-#         fi = open(os.path.join(train_dir, file_), 'r')
-#         data = pd.read_csv(fi, sep='\t', names=data_info.COLUMN_NAMES)
-#         draw_dis(ax.flat[idx], data, file_)
-#     fig.suptitle(f'train {dataset}: k={k}')
-#     fig.show()
-
-#     fig, ax = plt.subplots(nrows=4, ncols=10, figsize=(15, 7), sharey=True)
-#     fig.subplots_adjust(hspace=0.5)
-#     list_file = os.listdir(test_dir)
-#     list_file.sort()
-#     for idx, file_ in enumerate(list_file):
-#         fi = open(os.path.join(test_dir, file_), 'r')
-#         data = pd.read_csv(fi, sep='\t', names=data_info.COLUMN_NAMES)
-#         draw_dis(ax.flat[idx], data, file_)
-#     fig.suptitle(f'test {dataset}: k={k}')
-#     fig.show()
+    draw_all_dis(train_data_path, (15, 15), f'train {strategy}')
+    draw_all_dis(test_data_paths['query'], (15, 4), f'test query {strategy}')
+    draw_all_dis(test_data_paths['support'], (15, 4), f'test support {strategy}')
 
 def write_data(file_path:str, client:dict[int, pd.DataFrame]):
     df = pd.concat(client.values(), ignore_index=True)
@@ -84,35 +57,46 @@ def write_client(dir:str, id:int, client:dict[int, pd.DataFrame], split_supp_qry
             qry_set[label] = client[label].iloc[:int(num_samples*FL_config.QUERY_RATIO), :]
             supp_set[label] = client[label].iloc[int(num_samples*FL_config.QUERY_RATIO):, :]
 
-        test_supp_file = os.path.join(dir, f'{id}_s.csv')
+        test_supp_file = os.path.join(dir, 'support', f'{id}_s.csv')
         write_data(test_supp_file, supp_set)
-        test_qry_file = os.path.join(dir, f'{id}_q.csv')
+        test_qry_file = os.path.join(dir, 'query', f'{id}_q.csv')
         write_data(test_qry_file, qry_set)
     else:
         train_file = os.path.join(dir, f'{id}.csv')
         write_data(train_file, client)
 
-def write_all_clients(clients:dict[int, dict], data_path:str, strategy:str):
-    train_data_path = os.path.join(data_path, f'client_train_{strategy}')
-    test_data_path = os.path.join(data_path, f'client_test_{strategy}')
-    if os.path.isdir(train_data_path):
-        shutil.rmtree(train_data_path)
-    if os.path.isdir(test_data_path):
-        shutil.rmtree(test_data_path)
-    os.mkdir(train_data_path)
-    os.mkdir(test_data_path)
+def get_output_data_path(data_path:str, strategy:str) -> tuple[str, dict]:
+    train_data_path = os.path.join(data_path, f'{strategy}_client_train')
+    test_data_path = os.path.join(data_path, f'{strategy}_client_test')
+    test_data_paths = {
+        'all': test_data_path,
+        'query': os.path.join(test_data_path, 'query'),
+        'support': os.path.join(test_data_path, 'support')
+    }
+    return train_data_path, test_data_paths
 
-    print(f'Write data to {train_data_path} and {test_data_path}\n')
+def reset_data(data_path:str, strategy: str) -> tuple[str, dict]:
+    train_data_path, test_data_paths = get_output_data_path(data_path, strategy)
+    if os.path.isdir(train_data_path): shutil.rmtree(train_data_path)
+    if os.path.isdir(test_data_paths['all']): shutil.rmtree(test_data_paths['all'])
+    os.mkdir(train_data_path)
+    os.makedirs(test_data_paths['query'])
+    os.makedirs(test_data_paths['support'])
+    return train_data_path, test_data_paths
+
+def write_all_clients(clients:dict[int, dict], data_path:str, strategy:str):
+    train_data_path, test_data_paths = reset_data(data_path, strategy)
+
+    print(f"Write data to {train_data_path} and {test_data_paths['all']}\n")
+    num_clients = len(clients)
     for client in clients.keys():
         if client < num_clients*FL_config.TRAIN_RATIO:
-            # Write TRAIN data
             write_client(dir=train_data_path, id=client, client=clients[client])
         else:
-            # Write TEST data
-            write_client(dir=test_data_path, id=client, client=clients[client], split_supp_qry=True)
+            write_client(dir=test_data_paths['all'], id=client, client=clients[client], split_supp_qry=True)
 
 # type = {'uniform', 'dirichlet'}
-def distribution_based_split_client(data_by_label:list[pd.DataFrame], num_clients:int, num_labels:int, type:str, alpha:float):
+def distribution_based_split_client(data_by_label:list[pd.DataFrame], num_clients:int, num_labels:int, type:str):
     # compute number of samples for each label
     num_samples_per_label = []
     for data in data_by_label:
@@ -120,15 +104,16 @@ def distribution_based_split_client(data_by_label:list[pd.DataFrame], num_client
 
     num_samples_in_client = []
     # compute the percentages data of each label in each client
-    alphas = np.full(num_clients, alpha)
     if type=='uniform':
+        alpha = np.full(num_clients, 1/num_clients)
         # split using Uniform distribution
         for label in range(num_labels):
-            num_samples_in_client.append((np.round(alphas * num_samples_per_label[label]).astype(int)).tolist())
+            num_samples_in_client.append((np.round(alpha * num_samples_per_label[label]).astype(int)).tolist())
     elif type=='dirichlet':
         # split using Distribution-based label imbalance mode
+        alpha = np.full(num_clients, FL_config.DIRICHLET_RATIO)
         for label in range(num_labels):
-            p = np.random.dirichlet(alphas)
+            p = np.random.dirichlet(alpha)
             num_samples_in_client.append((np.round(p * num_samples_per_label[label]).astype(int)).tolist())
 
     # split data to client
@@ -147,47 +132,34 @@ def distribution_based_split_client(data_by_label:list[pd.DataFrame], num_client
     return clients
 
 # Distribution-based label imbalance: each party is allocated a proportion of the samples of each label according to Dirichlet distribution.
-def dirichlet_based_gen(data_path:str, num_clients:int=100, num_labels:int=10, alpha:float=0.5):
-    # distribution_data_path=os.path.join(data_path, strategies.DISTRIBUTION_BASED_SKEW)
-    # if os.path.isdir(distribution_data_path):
-    #     shutil.rmtree(distribution_data_path)
-    # os.mkdir(distribution_data_path)
-    data = data_info.get_table()
-
-    data_by_label = get_data_by_label(data, num_labels)
+def dirichlet_based_gen():
+    data_by_label = Data.get_table()
+    num_labels = Data.get_num_labels()
+    num_clients = FL_config.NUM_CLIENTS
 
     print(f'Generate data: Dirichlet distribution, num_clients={num_clients}, num_labels={num_labels}')
-    clients = distribution_based_split_client(data_by_label, num_clients, num_labels, alpha)
-    write_all_clients(clients, data_path, strategies.DISTRIBUTION_BASED_SKEW)
+    return distribution_based_split_client(data_by_label, num_clients, num_labels, strategies.DISTRIBUTION_BASED_SKEW)
 
-def iid_gen(data_path:str, num_clients:int, num_labels:int):
-    num_clients = 100
-    num_labels = 1573
-    k=5 # 5 for iid
+def iid_gen():
+    data_by_label = Data.get_table()
+    num_labels = Data.get_num_labels()
+    num_clients = FL_config.NUM_CLIENTS
 
-    iid_data_path=os.path.join(data_path, 'iid')
-    if os.path.isdir(iid_data_path):
-        shutil.rmtree(iid_data_path)
-    os.mkdir(iid_data_path)
-
-    X, y = get_X_y(data_path)
-    data_by_label = get_data_by_label(X, y, num_labels)
 
     print(f'Generate data: IID, num_clients={num_clients}, num_labels={num_labels}')
-    clients = distribution_based_split_client(data_by_label, num_clients, num_labels, 'uniform')
-    write_all_clients(clients, data_path, strategies.IID)
+    return distribution_based_split_client(data_by_label, num_clients, num_labels, 'uniform')
 
 # split using Quantity-based label imbalance mode
-def quantity_based_split_client(data_by_label:list[np.array], k:int, num_clients:int=100, num_labels:int=10):
+def quantity_based_split_client(data_by_label:list[pd.DataFrame], labels_per_client:int, num_clients:int, num_labels:int):
     partition_labels = {i:0 for i in range(num_labels)}
 
     # init all clients and partition labels
-    all_clients = {}
+    clients = {}
     for i in range(num_clients):
-        all_clients[i] = {}
-        labels = np.random.choice(list(range(num_labels)), k, replace=False).tolist()
+        clients[i] = {}
+        labels = np.random.choice(list(range(num_labels)), labels_per_client, replace=False).tolist()
         for label in labels:
-            all_clients[i][label] = None
+            clients[i][label] = None
             partition_labels[label] += 1
 
     # split sample of label into partitions
@@ -199,46 +171,29 @@ def quantity_based_split_client(data_by_label:list[np.array], k:int, num_clients
 
     # split data into clients
     for i in range(num_clients):
-        for label in all_clients[i].keys():
-            all_clients[i][label] = labels_after_partition[label][counts[label]].tolist()
+        for label in clients[i].keys():
+            clients[i][label] = labels_after_partition[label][counts[label]]
             counts[label] += 1
 
-    return all_clients
+    return clients
 
 # Quantity-based label imbalance: each party owns data samples of a fixed number of labels.
-def quantity_based_gen(data_path:str, num_clients:int, num_labels:int, labels_per_client:int):
-    ks = [15,30,45] # 1,2,3 for quantity-based imbalance
-    num_clients = 100
-    num_labels = 1573
+def quantity_based_gen(labels_per_client:int):
+    data_by_label = Data.get_table()
+    num_labels = Data.get_num_labels()
+    num_clients = FL_config.NUM_CLIENTS
 
-    # quantity_data_path=os.path.join(data_path, 'quantity')
-    # if os.path.isdir(quantity_data_path):
-    #     shutil.rmtree(quantity_data_path)
-    # os.mkdir(quantity_data_path)
+    print(f'Generate data: Dirichlet distribution, num_clients={num_clients}, num_labels={num_labels}')
+    return quantity_based_split_client(data_by_label, labels_per_client, num_clients, num_labels)
 
-    X, y = get_X_y(data_path)
-    data_by_label = get_data_by_label(X, y, num_labels)
-
-    for k in ks:
-        print(f'Generate data: k={k}, num_clients={num_clients}, num_labels={num_labels}')
-        all_clients = quantity_based_split_client(data_by_label, k, num_clients, num_labels)
-
-        # Write data to quantity directory
-        write_all_clients(
-            all_clients=all_clients, 
-            data_path=data_path,
-            strategy=f'quantity',
-            num_clients=num_clients
-        )
-
-def data_generator(data_path:str, strategy:str, *arg):
-    (num_clients, num_labels) = (arg[0], arg[1])
-
+def data_generator(output_data_path:str, strategy:str, *arg):
     if strategy == strategies.DISTRIBUTION_BASED_SKEW:
-        alpha = arg[2]
-        dirichlet_based_gen(data_path, num_clients, num_labels, alpha)
-    elif strategy == strategies.IID:
-        iid_gen(data_path, num_clients, num_labels)
+        clients = dirichlet_based_gen()
     elif strategy == strategies.QUANTITY_BASED_SKEW:
-        labels_per_client = arg[2]
-        quantity_based_gen(data_path, num_clients, num_labels, labels_per_client)
+        labels_per_client = arg[0]
+        strategy = f"{strategy}_{labels_per_client}"
+        clients = quantity_based_gen(labels_per_client)
+    elif strategy == strategies.IID:
+        clients = iid_gen()
+    
+    write_all_clients(clients, output_data_path, strategy)
