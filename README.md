@@ -1,6 +1,6 @@
 # Xmoji
 
-Improving accurate of Emoji Prediction model using Explainable AI
+Improving Emoji Prediction model using Explainable AI
 
 ![Idea diagram](./docs/imgs/Xmoji.png)
 
