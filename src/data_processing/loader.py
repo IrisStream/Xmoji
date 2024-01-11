@@ -4,6 +4,7 @@ from transformers import DistilBertTokenizer
 import torch
 import numpy as np
 import pandas as pd
+from settings import Data
 
 # class EmojiDataset(Dataset):
 #     def __init__(self, json_file):
@@ -23,12 +24,7 @@ import pandas as pd
 #             data = json.load(file)
 #         return data
 
-# Defining some key variables that will be used later on in the training
-MAX_LEN = 512
-TRAIN_BATCH_SIZE = 4
-VALID_BATCH_SIZE = 2
-EPOCHS = 1
-LEARNING_RATE = 1e-05
+MAX_LEN = int(Data.get_data_statistic()['Max words per sample'])
 tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-cased')
 
 class EmojiDataset(Dataset):
@@ -39,8 +35,8 @@ class EmojiDataset(Dataset):
         self.max_len = max_len
         
     def __getitem__(self, index):
-        sentence = str(self.data.TEXT[index])
-        sentence = " ".join(title.split())
+        sentence = self.data.TEXT[index] # sentence = str(self.data.TEXT[index])
+        sentence = " ".join(sentence.split())
         inputs = self.tokenizer.encode_plus(
             sentence,
             None,
@@ -56,7 +52,7 @@ class EmojiDataset(Dataset):
         return {
             'ids': torch.tensor(ids, dtype=torch.long),
             'mask': torch.tensor(mask, dtype=torch.long),
-            'targets': torch.tensor(self.data.ENCODE_CAT[index], dtype=torch.long)
+            'targets': torch.tensor(self.data.LABEL[index], dtype=torch.long)
         } 
     
     def __len__(self):
