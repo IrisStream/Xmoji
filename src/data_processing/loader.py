@@ -1,34 +1,11 @@
-import json
 from torch.utils.data import Dataset, DataLoader
 from transformers import DistilBertTokenizer
 import torch
-import numpy as np
+import csv
 import pandas as pd
+from settings import Data, FL_config
 
-# class EmojiDataset(Dataset):
-#     def __init__(self, json_file):
-#         self.data = self.load_data(json_file)
-
-#     def __len__(self):
-#         return len(self.data)
-
-#     def __getitem__(self, index):
-#         item = self.data[index]
-#         label = item['label']
-#         sentence = item['sentence']
-#         return {'label': label, 'sentence': sentence}
-
-#     def load_data(self, json_file):
-#         with open(json_file, 'r') as file:
-#             data = json.load(file)
-#         return data
-
-# Defining some key variables that will be used later on in the training
-MAX_LEN = 512
-TRAIN_BATCH_SIZE = 4
-VALID_BATCH_SIZE = 2
-EPOCHS = 1
-LEARNING_RATE = 1e-05
+MAX_LEN = int(Data.get_data_statistic()['Max words per sample'])
 tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-cased')
 
 class EmojiDataset(Dataset):
@@ -39,8 +16,8 @@ class EmojiDataset(Dataset):
         self.max_len = max_len
         
     def __getitem__(self, index):
-        sentence = str(self.data.TEXT[index])
-        sentence = " ".join(title.split())
+        sentence = self.data.TEXT[index] # sentence = str(self.data.TEXT[index])
+        sentence = " ".join(sentence.split())
         inputs = self.tokenizer.encode_plus(
             sentence,
             None,
@@ -56,7 +33,7 @@ class EmojiDataset(Dataset):
         return {
             'ids': torch.tensor(ids, dtype=torch.long),
             'mask': torch.tensor(mask, dtype=torch.long),
-            'targets': torch.tensor(self.data.ENCODE_CAT[index], dtype=torch.long)
+            'targets': torch.tensor(self.data.LABEL[index], dtype=torch.long)
         } 
     
     def __len__(self):
@@ -64,7 +41,9 @@ class EmojiDataset(Dataset):
 
 def get_loader(file_path: str, batch_size: int=32, shuffle: bool=True, split_supp_query:bool = True) -> DataLoader:
     # load data from file into torch.Tensor
-    df = pd.read_csv(file_path, sep='\t', names=["TEXT", "LABEL"])
+    df = pd.read_csv(file_path, sep='\t',encoding='utf-8', quoting=csv.QUOTE_NONE, names=Data.get_columns(), header=0)
+
+    # pd.to_numeric(df['LABEL'])
 
     dataloader_params = {
         'batch_size': batch_size,
@@ -73,7 +52,7 @@ def get_loader(file_path: str, batch_size: int=32, shuffle: bool=True, split_sup
     }
 
     if split_supp_query:
-        query_df=df.sample(frac=0.8,random_state=200)
+        query_df=df.sample(frac=FL_config.QUERY_RATIO,random_state=200)
         support_df=df.drop(query_df.index).reset_index(drop=True)
         query_df = query_df.reset_index(drop=True)
 
