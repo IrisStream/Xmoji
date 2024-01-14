@@ -1,10 +1,7 @@
 import numpy as np
 import os
-import torchvision
-import torchvision.transforms as transforms
 import matplotlib.pyplot as plt
 import pandas as pd
-import json
 import shutil
 import csv
 from settings import strategies, FL_config, Data
@@ -30,14 +27,12 @@ def draw_all_dis(data_path:str, fig_size, title:str):
     for idx, file_ in enumerate(list_file):
         file_path = os.path.join(data_path, file_)
         ylimit[idx] = draw_dis(ax.flat[idx], file_path, file_)
-        # print(f'{file_path} - {ylimit[idx]}')
 
     fig.suptitle(title)
     plt.setp(ax, xlim=(-4, Data.get_num_labels() + 4), ylim=(0, ylimit.mean()))
     fig.tight_layout() 
     fig.show()
 
-# def vis_dis_client(dir:str, dataset:str, k:int):
 def vis_dis_client(data_path:str, strategy:str):
     train_data_path, test_data_paths = get_output_data_path(data_path, strategy)
 

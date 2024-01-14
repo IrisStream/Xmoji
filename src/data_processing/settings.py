@@ -1,5 +1,4 @@
 import pandas as pd 
-import numpy as np
 import os 
 import csv
 import matplotlib.pyplot as plt
@@ -118,10 +117,6 @@ class Data:
         data_by_label = []
         for label in range(num_labels):
             data_by_label.append(data[data.LABEL == label].sample(frac=1).reset_index(drop=True).head(emoji_frequency_list.Frequency[label]))
-            # rows_to_select = int(scale * len(data_by_label[-1]))
-            # data_by_label[-1] = data_by_label[-1].iloc[:rows_to_select, :]
-            # shuffle to have client with different data after generating
-            # data_by_label[label](frac=1).reset_index(drop=True)
         return data_by_label
     
     @staticmethod 
