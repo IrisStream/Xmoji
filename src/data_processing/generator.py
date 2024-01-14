@@ -1,10 +1,7 @@
 import numpy as np
 import os
-import torchvision
-import torchvision.transforms as transforms
 import matplotlib.pyplot as plt
 import pandas as pd
-import json
 import shutil
 import csv
 from settings import strategies, FL_config, Data
@@ -30,14 +27,12 @@ def draw_all_dis(data_path:str, fig_size, title:str):
     for idx, file_ in enumerate(list_file):
         file_path = os.path.join(data_path, file_)
         ylimit[idx] = draw_dis(ax.flat[idx], file_path, file_)
-        # print(f'{file_path} - {ylimit[idx]}')
 
     fig.suptitle(title)
     plt.setp(ax, xlim=(-4, Data.get_num_labels() + 4), ylim=(0, ylimit.mean()))
     fig.tight_layout() 
     fig.show()
 
-# def vis_dis_client(dir:str, dataset:str, k:int):
 def vis_dis_client(data_path:str, strategy:str):
     train_data_path, test_data_paths = get_output_data_path(data_path, strategy)
 
@@ -186,6 +181,17 @@ def quantity_based_gen(labels_per_client:int):
     print(f'Generate data: Dirichlet distribution, num_clients={num_clients}, num_labels={num_labels}')
     return quantity_based_split_client(data_by_label, labels_per_client, num_clients, num_labels)
 
+def data_statistic(clients, strategy):
+    samples_per_user = np.array([len(pd.concat(client.values(), ignore_index=True)) for client in clients.values()])
+    data_stt = {
+        "Total clients" : FL_config.NUM_CLIENTS,
+        "Mean samples per user": np.mean(samples_per_user),
+        "Std samples per user": np.std(samples_per_user)
+    }
+    df = pd.DataFrame(columns = ["Key", "Value"], data = list(data_stt.items()))
+    file_path = os.path.join(Data.get_data_path(), f'statistic_{strategy}.csv')
+    df.to_csv(file_path, index=False)
+
 def data_generator(output_data_path:str, strategy:str, *arg):
     if strategy == strategies.DISTRIBUTION_BASED_SKEW:
         clients = dirichlet_based_gen()
@@ -197,3 +203,4 @@ def data_generator(output_data_path:str, strategy:str, *arg):
         clients = iid_gen()
     
     write_all_clients(clients, output_data_path, strategy)
+    data_statistic(clients, strategy)
